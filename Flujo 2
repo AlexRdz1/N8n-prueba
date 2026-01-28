@@ -2,56 +2,105 @@
   "nodes": [
     {
       "parameters": {
-        "pollTimes": {
-          "item": [{ "mode": "everyMinute" }]
-        },
-        "documentId": {
-          "__rl": true,
-          "value": "ID_DE_TU_HOJA_DE_CALCULO",
-          "mode": "id"
-        },
-        "sheetName": "Historias",
-        "options": {}
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "documentId": { "__rl": true, "value": "ID_TU_SHEET", "mode": "id" },
+        "sheetName": "Sheet1"
       },
       "name": "Google Sheets Trigger",
       "type": "n8n-nodes-base.googleSheetsTrigger",
       "typeVersion": 1,
-      "position": [0, 240]
+      "position": [-200, 240]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.piapi.ai/api/v1/task",
         "sendHeaders": true,
-        "headerParameters": {
-          "item": [{ "name": "x-api-key", "value": "TU_API_KEY_PIAPI" }]
-        },
+        "headerParameters": { "item": [{ "name": "x-api-key", "value": "TU_PIAPI_KEY" }] },
         "sendBody": true,
         "bodyParameters": {
           "item": [
             { "name": "model", "value": "gpt-4o" },
-            { "name": "prompt", "value": "=Escribe un guion de terror analógico sobre: {{$json[\"Tema\"]}}. Devuelve solo el guion y un prompt para Midjourney separado por |" }
+            { "name": "prompt", "value": "={{$json[\"Tema\"]}}. Crea un guion de 15 segundos y un prompt de Midjourney. Separa ambos por '###'" }
           ]
         }
       },
-      "name": "PiAPI - Crear Guion",
+      "name": "PiAPI - Iniciar Guion",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [220, 240]
+      "position": [20, 240]
     },
     {
-      "parameters": {
-        "amount": 10,
-        "unit": "seconds"
-      },
-      "name": "Wait for Task",
+      "parameters": { "amount": 5, "unit": "seconds" },
+      "name": "Wait Guion",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
-      "position": [440, 240]
+      "position": [240, 240]
     },
     {
       "parameters": {
-        "url": "=https://api.piapi.ai/api/v1/task/{{$node[\"PiAPI - Crear Guion\"].json[\"data\"][\"task_id\"]}}",
+        "url": "=https://api.piapi.ai/api/v1/task/{{$node[\"PiAPI - Iniciar Guion\"].json[\"data\"][\"task_id\"]}}",
         "sendHeaders": true,
-        "headerParameters": {
-          "item": [{ "name": "x-api-
+        "headerParameters": { "item": [{ "name": "x-api-key", "value": "TU_PIAPI_KEY" }] }
+      },
+      "name": "Check Status Guion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [420, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{$json[\"data\"][\"status\"]}}", "value2": "completed" }]
+        }
+      },
+      "name": "IF Guion Listo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [620, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.piapi.ai/api/v1/task",
+        "sendHeaders": true,
+        "headerParameters": { "item": [{ "name": "x-api-key", "value": "TU_PIAPI_KEY" }] },
+        "sendBody": true,
+        "bodyParameters": {
+          "item": [
+            { "name": "model", "value": "midjourney" },
+            { "name": "prompt", "value": "={{$node[\"Check Status Guion\"].json[\"data\"][\"output\"].split('###')[1]}}" }
+          ]
+        }
+      },
+      "name": "PiAPI - Iniciar Imagen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 240]
+    },
+    {
+      "parameters": {
+        "fileContent": "={{$json[\"binary_data\"]}}",
+        "fileName": "={{$node[\"Google Sheets Trigger\"].json[\"Nombre\"]}}.png",
+        "parentId": "ID_CARPETA_DRIVE"
+      },
+      "name": "Google Drive - Guardar",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1100, 240]
+    }
+  ],
+  "connections": {
+    "Google Sheets Trigger": { "main": [[{ "node": "PiAPI - Iniciar Guion", "index": 0 }]] },
+    "PiAPI - Iniciar Guion": { "main": [[{ "node": "Wait Guion", "index": 0 }]] },
+    "Wait Guion": { "main": [[{ "node": "Check Status Guion", "index": 0 }]] },
+    "Check Status Guion": { "main": [[{ "node": "IF Guion Listo?", "index": 0 }]] },
+    "IF Guion Listo?": {
+      "main": [
+        [{ "node": "PiAPI - Iniciar Imagen", "index": 0 }],
+        [{ "node": "Wait Guion", "index": 0 }]
+      ]
+    },
+    "PiAPI - Iniciar Imagen": { "main": [[{ "node": "Google Drive - Guardar", "index": 0 }]] }
+  }
+}
