@@ -1,0 +1,125 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_TU_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": "Historias",
+        "options": {}
+      },
+      "name": "Google Sheets Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "item": [
+            {
+              "role": "system",
+              "content": "Actúa como un guionista experto. Genera un guion corto y un prompt de imagen detallado para el tema proporcionado."
+            },
+            {
+              "role": "user",
+              "content": "={{$node[\"Google Sheets Trigger\"].json[\"Tema\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "OpenAI - Generar Contenido",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "text": "={{$node[\"OpenAI - Generar Contenido\"].json[\"message\"][\"content\"]}}",
+        "voiceId": "ID_DE_VOZ_ELEVENLABS"
+      },
+      "name": "ElevenLabs - Audio",
+      "type": "n8n-nodes-base.elevenLabs",
+      "typeVersion": 1,
+      "position": [690, 200]
+    },
+    {
+      "parameters": {
+        "prompt": "={{$node[\"OpenAI - Generar Contenido\"].json[\"message\"][\"content\"]}}",
+        "model": "dall-e-3"
+      },
+      "name": "OpenAI - Imagen",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [690, 400]
+    },
+    {
+      "parameters": {
+        "fileContent": "={{$node[\"ElevenLabs - Audio\"].binary.data}}",
+        "fileName": "={{$node[\"Google Sheets Trigger\"].json[\"Título\"]}}_audio.mp3",
+        "parentId": "ID_CARPETA_DRIVE"
+      },
+      "name": "Drive - Subir Audio",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [910, 200]
+    },
+    {
+      "parameters": {
+        "fileContent": "={{$node[\"OpenAI - Imagen\"].binary.data}}",
+        "fileName": "={{$node[\"Google Sheets Trigger\"].json[\"Título\"]}}_imagen.png",
+        "parentId": "ID_CARPETA_DRIVE"
+      },
+      "name": "Drive - Subir Imagen",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [910, 400]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_TU_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": "Historias",
+        "rowNumber": "={{$node[\"Google Sheets Trigger\"].json[\"row_number\"]}}",
+        "columns": {
+          "item": [
+            {
+              "columnName": "Enlace Audio",
+              "columnValue": "={{$node[\"Drive - Subir Audio\"].json[\"webViewLink\"]}}"
+            },
+            {
+              "columnName": "Enlace Imagen",
+              "columnValue": "={{$node[\"Drive - Subir Imagen\"].json[\"webViewLink\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Google Sheets - Update",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1150, 300]
+    }
+  ],
+  "connections": {
+    "Google Sheets Trigger": { "main": [[{ "node": "OpenAI - Generar Contenido", "type": "main", "index": 0 }]] },
+    "OpenAI - Generar Contenido": { "main": [[{ "node": "ElevenLabs - Audio", "type": "main", "index": 0 }, { "node": "OpenAI - Imagen", "type": "main", "index": 0 }]] },
+    "ElevenLabs - Audio": { "main": [[{ "node": "Drive - Subir Audio", "type": "main", "index": 0 }]] },
+    "OpenAI - Imagen": { "main": [[{ "node": "Drive - Subir Imagen", "type": "main", "index": 0 }]] },
+    "Drive - Subir Audio": { "main": [[{ "node": "Google Sheets - Update", "type": "main", "index": 0 }]] },
+    "Drive - Subir Imagen": { "main": [[{ "node": "Google Sheets - Update", "type": "main", "index": 0 }]] }
+  }
+}
