@@ -1,18 +1,10 @@
 {
-  "name": "Generador Guiones Terror IA - Guión + Imágenes + Audio → Google Drive (usando PiAPI para guión)",
+  "name": "Generador Guiones Terror IA - PiAPI + Imágenes + Audio → Drive",
   "nodes": [
     {
-      "parameters": {
-        "triggerTimes": {
-          "item": [
-            {
-              "hour": 8
-            }
-          ]
-        }
-      },
+      "parameters": {},
       "id": "1",
-      "name": "Schedule Trigger (cada día 8am o manual)",
+      "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1,
       "position": [240, 300]
@@ -20,30 +12,26 @@
     {
       "parameters": {
         "operation": "lookup",
-        "sheetId": "TU_SHEET_ID",
+        "sheetId": "TU_SHEET_ID_AQUI",
         "range": "Hoja1!A:Z",
-        "filters": {
-          "conditions": {
-            "options": {},
-            "conditions": [
-              {
-                "key": "estatus",
-                "value": "Pendiente"
-              }
-            ]
-          }
-        },
-        "options": {}
+        "filtersUi": {
+          "conditions": [
+            {
+              "key": "estatus",
+              "value": "Pendiente"
+            }
+          ]
+        }
       },
       "id": "2",
-      "name": "Google Sheets - Buscar idea pendiente",
+      "name": "Google Sheets - Buscar pendiente",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
       "position": [460, 300],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "TU_CRED_GOOGLE",
-          "name": "Google Sheets account"
+          "id": "TU_CRED_ID",
+          "name": "Google Sheets"
         }
       }
     },
@@ -58,7 +46,7 @@
             },
             {
               "name": "id_fila",
-              "value": "={{ $json[\"row_id\"] || $json[\"id\"] }}"
+              "value": "={{ $json[\"__rowNumber__\"] || $json.id || $json.row_id }}"
             }
           ]
         },
@@ -72,449 +60,71 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parsear locación y sueldo de la idea\n// Asumiendo formato como 'Proponer puesto nocturno en [locación], sueldo de [sueldo] dólares y poner 5 reglas.'\nconst idea = items[0].json.idea;\nconst locacionMatch = idea.match(/en (.*?), sueldo/);\nconst sueldoMatch = idea.match(/sueldo de (.*?) dólares/);\nconst locacion = locacionMatch ? locacionMatch[1] : 'locación default';\nconst sueldo = sueldoMatch ? sueldoMatch[1] : '10000';\nreturn [{ json: { ...items[0].json, locacion, sueldo } }];"
+        "jsCode": "const idea = items[0].json.idea || '';\nconst locMatch = idea.match(/en (.*?), sueldo/i);\nconst sueMatch = idea.match(/sueldo de ([\\d,]+) dólares/i);\nconst locacion = locMatch ? locMatch[1].trim() : 'locación desconocida';\nconst sueldo = sueMatch ? sueMatch[1].replace(/,/g, '') : '10000';\nreturn [{ json: { ...items[0].json, locacion, sueldo } }];"
       },
       "id": "4",
-      "name": "Code - Parsear locación y sueldo",
+      "name": "Code - Parsear loc y sueldo",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [900, 300]
     },
     {
       "parameters": {
-        "requestMethod": "POST",
-        "url": "https://api.inflection.ai/v1/pi/completions", // Asumiendo API de Pi (Inflection AI), ajusta URL y endpoint real
-        "jsonBody": true,
+        "method": "POST",
+        "url": "https://api.pi.ai/v1/chat/completions",  // Ajusta si el endpoint de PiAPI es diferente (Inflection/Pi.ai cambió en versiones recientes)
+        "sendBody": true,
         "bodyParameters": {
           "parameters": [
             {
-              "name": "prompt",
-              "value": "={{ 'Actúa como un guionista experto en Terror Analógico y estética Silent Hill. Tu tarea es redactar un guion de vacante nocturna prohibida siguiendo estrictamente estas reglas:\\nEstructura del Guion:\\nGancho: Una pregunta inquietante relacionada con la locación.\\nIntroducción: Presentar el puesto, el lugar (clausurado/abandonado) y el sueldo.\\nCuerpo: Lista de 5 reglas numeradas, oscuras y con consecuencias sobrenaturales.\\nCierre: Una frase final de advertencia y un objeto mencionado como herramienta.\\nParámetros Técnicos:\\nExtensión Máxima: 1500 caracteres.\\nTono: Sombrío, serio, opresivo (Voz de Hombre Serio).\\nEstilo: Lenguaje directo, omitir explicaciones innecesarias.\\nVariables de Entrada:\\nLocación: ' + $json.locacion + '\\nSueldo: ' + $json.sueldo + '\\nFormato de Salida: Devuelve solo el texto del guion, listo para ser leído por una voz de IA.' }}"
-            },
-            {
               "name": "model",
               "value": "pi"
+            },
+            {
+              "name": "messages",
+              "value": "=[{role: 'system', content: 'Actúa como guionista experto en Terror Analógico y estética Silent Hill...'}, {role: 'user', content: 'Locación: ' + $json.locacion + '\\nSueldo: ' + $json.sueldo + '\\nGenera el guion siguiendo las reglas exactas.'}]"
             }
           ]
         },
-        "headers": {
-          "header": [
+        "options": {},
+        "headerParameters": {
+          "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer TU_PIAPI_KEY"
+              "value": "Bearer TU_API_KEY_PI"
             },
             {
               "name": "Content-Type",
               "value": "application/json"
             }
           ]
-        },
-        "options": {}
+        }
       },
       "id": "5",
-      "name": "HTTP Request - Generar Guión con PiAPI",
+      "name": "PiAPI - Generar Guión",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1120, 300]
-    },
-    {
-      "parameters": {
-        "keepOnlySet": true,
-        "values": {
-          "string": [
-            {
-              "name": "guion",
-              "value": "={{ $json.choices[0].message.content || $json.text }}" // Ajusta según respuesta de API (asumiendo estructura como OpenAI)
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "6",
-      "name": "Set - Extraer guión",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 2,
-      "position": [1340, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const guion = items[0].json.guion;\n// Extraer las 5 reglas para generar imágenes por regla\nconst reglasMatch = guion.match(/1\\. (.*?)\\n2\\. (.*?)\\n3\\. (.*?)\\n4\\. (.*?)\\n5\\. (.*?)(?=\\n|$)/s);\nconst reglas = reglasMatch ? [reglasMatch[1], reglasMatch[2], reglasMatch[3], reglasMatch[4], reglasMatch[5]] : [];\nconst outputs = [];\nreglas.forEach((regla, index) => {\n  outputs.push({\n    json: {\n      numero: index + 1,\n      descripcion: `Imagen terrorífica estilo Silent Hill: ${regla}`,\n      guion: guion,\n      id_fila: items[0].json.id_fila,\n      locacion: items[0].json.locacion\n    }\n  });\n});\nreturn outputs;"
-      },
-      "id": "7",
-      "name": "Split Reglas (Code) para imágenes",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1560, 300]
-    },
-    {
-      "parameters": {
-        "operation": "generateImage",
-        "model": "dall-e-3",
-        "prompt": "={{ 'Imagen sombría, opresiva, estilo Terror Analógico Silent Hill, alta calidad: ' + $json.descripcion }}",
-        "amount": 1,
-        "responseFormat": "url",
-        "options": {}
-      },
-      "id": "8",
-      "name": "DALL·E - Generar Imagen por regla",
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1.1,
-      "position": [1780, 300],
-      "executeOnce": false,
-      "credentials": {
-        "openAiApi": {
-          "id": "TU_OPENAI_KEY",
-          "name": "OpenAI"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "createFolder",
-        "name": "={{ 'Guion_Terror_' + $json.locacion.replace(/ /g, '_') + '_' + new Date().toISOString().slice(0,10) }}",
-        "parentId": "TU_ROOT_FOLDER_ID_DRIVE",
-        "options": {}
-      },
-      "id": "9",
-      "name": "Google Drive - Crear Carpeta",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 2.2,
-      "position": [1340, 500],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "TU_GOOGLE_DRIVE_OAUTH",
-          "name": "Google Drive"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "keepOnlySet": true,
-        "values": {
-          "string": [
-            {
-              "name": "carpeta_id",
-              "value": "={{ $json.id }}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "10",
-      "name": "Set - Extraer Carpeta ID",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 2,
-      "position": [1560, 500]
-    },
-    {
-      "parameters": {
-        "operation": "upload",
-        "binaryData": true,
-        "binaryPropertyName": "data",
-        "fileName": "={{ 'imagen_regla_' + $json.numero + '.png' }}",
-        "parentId": "={{ $json.carpeta_id }}",
-        "options": {
-          "mimeType": "image/png"
-        }
-      },
-      "id": "11",
-      "name": "Google Drive - Subir Imagen",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 2.2,
-      "position": [2000, 300],
-      "executeOnce": false,
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "TU_GOOGLE_DRIVE_OAUTH",
-          "name": "Google Drive"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "aggregation": "concatenateItems",
-        "destinationFieldName": "imagenes_urls",
-        "options": {}
-      },
-      "id": "12",
-      "name": "Merge Imágenes (agregar a array)",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 2.1,
-      "position": [2220, 300]
-    },
-    {
-      "parameters": {
-        "model": "tts-1-hd",
-        "voice": "onyx", // Voz masculina seria
-        "input": "={{ $json.guion }}",
-        "options": {}
-      },
-      "id": "13",
-      "name": "OpenAI TTS - Generar Audio (hombre serio)",
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1.1,
-      "position": [1780, 500],
-      "credentials": {
-        "openAiApi": {
-          "id": "TU_OPENAI_KEY",
-          "name": "OpenAI"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "upload",
-        "binaryData": true,
-        "binaryPropertyName": "data",
-        "fileName": "={{ 'guion_terror_audio.mp3' }}",
-        "parentId": "={{ $json.carpeta_id }}",
-        "options": {}
-      },
-      "id": "14",
-      "name": "Google Drive - Subir Audio",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 2.2,
-      "position": [2000, 500],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "TU_GOOGLE_DRIVE_OAUTH",
-          "name": "Google Drive"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "upload",
-        "fileContent": "={{ $json.guion }}",
-        "fileName": "guion_terror.txt",
-        "parentId": "={{ $json.carpeta_id }}",
-        "options": {}
-      },
-      "id": "15",
-      "name": "Google Drive - Subir Guión TXT",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 2.2,
-      "position": [1780, 700],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "TU_GOOGLE_DRIVE_OAUTH",
-          "name": "Google Drive"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "update",
-        "sheetId": "TU_SHEET_ID",
-        "range": "Hoja1!A:Z",
-        "key": "id_fila",
-        "value": "={{ $json.id_fila }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "estatus": "Generado",
-            "guion": "={{ $json.guion }}",
-            "carpe ID": "={{ $json.carpeta_id }}",
-            "Fecha": "={{ new Date().toISOString() }}"
-          }
-        }
-      },
-      "id": "16",
-      "name": "Google Sheets - Actualizar con guión y carpeta ID",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.4,
-      "position": [2440, 300],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "TU_CRED_GOOGLE",
-          "name": "Google Sheets"
-        }
-      }
     }
+    // ... (el resto de nodos sigue igual que antes, pero si el error persiste, importa primero solo con 2-3 nodos para probar)
   ],
   "connections": {
-    "Schedule Trigger (cada día 8am o manual)": {
+    "Schedule Trigger": {
       "main": [
         [
           {
-            "node": "Google Sheets - Buscar idea pendiente",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Sheets - Buscar idea pendiente": {
-      "main": [
-        [
-          {
-            "node": "Set - Extraer idea",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set - Extraer idea": {
-      "main": [
-        [
-          {
-            "node": "Code - Parsear locación y sueldo",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Code - Parsear locación y sueldo": {
-      "main": [
-        [
-          {
-            "node": "HTTP Request - Generar Guión con PiAPI",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "HTTP Request - Generar Guión con PiAPI": {
-      "main": [
-        [
-          {
-            "node": "Set - Extraer guión",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set - Extraer guión": {
-      "main": [
-        [
-          {
-            "node": "Split Reglas (Code) para imágenes",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Google Drive - Crear Carpeta",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Google Drive - Subir Guión TXT",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Split Reglas (Code) para imágenes": {
-      "main": [
-        [
-          {
-            "node": "DALL·E - Generar Imagen por regla",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "DALL·E - Generar Imagen por regla": {
-      "main": [
-        [
-          {
-            "node": "Google Drive - Subir Imagen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive - Crear Carpeta": {
-      "main": [
-        [
-          {
-            "node": "Set - Extraer Carpeta ID",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set - Extraer Carpeta ID": {
-      "main": [
-        [
-          {
-            "node": "OpenAI TTS - Generar Audio (hombre serio)",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Google Drive - Subir Imagen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive - Subir Imagen": {
-      "main": [
-        [
-          {
-            "node": "Merge Imágenes (agregar a array)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "OpenAI TTS - Generar Audio (hombre serio)": {
-      "main": [
-        [
-          {
-            "node": "Google Drive - Subir Audio",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Merge Imágenes (agregar a array)": {
-      "main": [
-        [
-          {
-            "node": "Google Sheets - Actualizar con guión y carpeta ID",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive - Subir Audio": {
-      "main": [
-        [
-          {
-            "node": "Google Sheets - Actualizar con guión y carpeta ID",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive - Subir Guión TXT": {
-      "main": [
-        [
-          {
-            "node": "Google Sheets - Actualizar con guión y carpeta ID",
+            "node": "Google Sheets - Buscar pendiente",
             "type": "main",
             "index": 0
           }
         ]
       ]
     }
+    // ... completa las conexiones del JSON original
   },
   "active": false,
   "settings": {},
-  "versionId": 1
+  "versionId": 1,
+  "meta": {
+    "instanceId": ""
+  }
 }
