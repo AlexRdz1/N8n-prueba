@@ -71,41 +71,42 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.pi.ai/v1/chat/completions",  // Ajusta si el endpoint de PiAPI es diferente (Inflection/Pi.ai cambió en versiones recientes)
+        "url": "https://api.piapi.ai/v1/chat/completions",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "model",
-              "value": "pi"
-            },
-            {
-              "name": "messages",
-              "value": "=[{role: 'system', content: 'Actúa como guionista experto en Terror Analógico y estética Silent Hill...'}, {role: 'user', content: 'Locación: ' + $json.locacion + '\\nSueldo: ' + $json.sueldo + '\\nGenera el guion siguiendo las reglas exactas.'}]"
-            }
-          ]
-        },
-        "options": {},
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer TU_API_KEY_PI"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        }
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"gpt-4o-mini\", \"messages\": [ {\"role\": \"system\", \"content\": \"Actúa como un guionista experto en Terror Analógico y estética Silent Hill. Tu tarea es redactar un guion de vacante nocturna prohibida siguiendo estrictamente estas reglas: Estructura del Guion: Gancho: Una pregunta inquietante relacionada con la locación. Introducción: Presentar el puesto, el lugar (clausurado/abandonado) y el sueldo. Cuerpo: Lista de 5 reglas numeradas, oscuras y con consecuencias sobrenaturales. Cierre: Una frase final de advertencia y un objeto mencionado como herramienta. Parámetros Técnicos: Extensión Máxima: 1500 caracteres. Tono: Sombrío, serio, opresivo (Voz de Hombre Serio). Estilo: Lenguaje directo, omitir explicaciones innecesarias. Variables de Entrada: Locación: \" + $json.locacion + \" Sueldo: \" + $json.sueldo + \" Formato de Salida: Devuelve solo el texto del guion, listo para ser leído por una voz de IA.\" }, {\"role\": \"user\", \"content\": \"Genera el guion ahora.\" } ] } }}"
       },
       "id": "5",
       "name": "PiAPI - Generar Guión",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300]
+      "position": [1120, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TU_CRED_PIAPI",
+          "name": "PiAPI Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "guion",
+              "value": "={{ $json.choices[0].message.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6",
+      "name": "Set - Extraer guión",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1340, 300]
     }
-    // ... (el resto de nodos sigue igual que antes, pero si el error persiste, importa primero solo con 2-3 nodos para probar)
   ],
   "connections": {
     "Schedule Trigger": {
@@ -118,13 +119,53 @@
           }
         ]
       ]
+    },
+    "Google Sheets - Buscar pendiente": {
+      "main": [
+        [
+          {
+            "node": "Set - Extraer idea",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Extraer idea": {
+      "main": [
+        [
+          {
+            "node": "Code - Parsear loc y sueldo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Parsear loc y sueldo": {
+      "main": [
+        [
+          {
+            "node": "PiAPI - Generar Guión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PiAPI - Generar Guión": {
+      "main": [
+        [
+          {
+            "node": "Set - Extraer guión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
-    // ... completa las conexiones del JSON original
   },
   "active": false,
   "settings": {},
-  "versionId": 1,
-  "meta": {
-    "instanceId": ""
-  }
+  "versionId": 1
 }
