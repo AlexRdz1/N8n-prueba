@@ -1,0 +1,477 @@
+{
+  "name": "Sheets -> PiAPI (Guion+Imagenes+Audio) -> Drive",
+  "nodes": [
+    {
+      "id": "sheetsTrigger",
+      "name": "Google Sheets Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [-900, 300],
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "documentId": "REPLACE_SPREADSHEET_ID",
+        "sheetName": "REPLACE_SHEET_NAME"
+      },
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "onlyNew",
+      "name": "IF Status NEW",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-700, 300],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"Status\"]}}",
+              "operation": "equal",
+              "value2": "NEW"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "markProcessing",
+      "name": "Mark PROCESSING",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [-500, 300],
+      "parameters": {
+        "operation": "update",
+        "documentId": "REPLACE_SPREADSHEET_ID",
+        "sheetName": "REPLACE_SHEET_NAME",
+        "key": "rowNumber",
+        "dataToSend": "autoMapInputData",
+        "options": {},
+        "updateFields": {
+          "values": {
+            "Status": "PROCESSING"
+          }
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "createIdeaFolder",
+      "name": "Drive: Create Idea Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-300, 300],
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ ($json[\"Idea\"] || \"idea\").replace(/[^a-zA-Z0-9 _-]/g,'').substring(0,40) }}",
+        "driveId": "My Drive",
+        "folderId": "REPLACE_PARENT_FOLDER_ID"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "createImagesFolder",
+      "name": "Drive: Create images/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-100, 180],
+      "parameters": {
+        "resource": "folder",
+        "name": "images",
+        "driveId": "My Drive",
+        "folderId": "={{$json[\"id\"]}}"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "createAudioFolder",
+      "name": "Drive: Create audio/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-100, 300],
+      "parameters": {
+        "resource": "folder",
+        "name": "audio",
+        "driveId": "My Drive",
+        "folderId": "={{$node[\"Drive: Create Idea Folder\"].json[\"id\"]}}"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "createGuionFolder",
+      "name": "Drive: Create guion/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-100, 420],
+      "parameters": {
+        "resource": "folder",
+        "name": "guion",
+        "driveId": "My Drive",
+        "folderId": "={{$node[\"Drive: Create Idea Folder\"].json[\"id\"]}}"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "writeFolderIds",
+      "name": "Write Folder IDs to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [120, 300],
+      "parameters": {
+        "operation": "update",
+        "documentId": "REPLACE_SPREADSHEET_ID",
+        "sheetName": "REPLACE_SHEET_NAME",
+        "key": "rowNumber",
+        "dataToSend": "autoMapInputData",
+        "updateFields": {
+          "values": {
+            "DriveFolderId": "={{$node[\"Drive: Create Idea Folder\"].json[\"id\"]}}",
+            "ImagesFolderId": "={{$node[\"Drive: Create images/\"].json[\"id\"]}}"
+          }
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "piapiGuion",
+      "name": "PiAPI LLM: Guion+Escenas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [360, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.piapi.ai/v1/chat/completions",
+        "jsonParameters": true,
+        "options": { "timeout": 300000 },
+        "headerParametersJson": "={\"Authorization\":\"Bearer {{$env.PIAPI_KEY}}\",\"Content-Type\":\"application/json\"}",
+        "bodyParametersJson": "={\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\": \"DEVUELVE SOLO JSON. Estructura: {title,language,script,scenes[],tts{read_aloud},files{base_name}}.\"},{\"role\":\"user\",\"content\": \"Idea: \" + ($json[\"Idea\"]||\"\") + \"\\n\\nPrompt maestro: \" + ($json[\"PromptGuion\"]||\"\") }],\"stream\":false}"
+      }
+    },
+    {
+      "id": "parseGuion",
+      "name": "Parse Guion JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 300],
+      "parameters": {
+        "jsCode": "const content = $json.choices?.[0]?.message?.content;\nif(!content) throw new Error('No LLM content');\nlet data;\ntry { data = JSON.parse(content); }\ncatch(e){ throw new Error('LLM no devolvio JSON valido: ' + e.message + '\\n' + content); }\nreturn [{...$json, guion:data}];"
+      }
+    },
+    {
+      "id": "uploadGuionJson",
+      "name": "Drive: Upload guion.json",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [760, 300],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "driveId": "My Drive",
+        "folderId": "={{$node[\"Drive: Create guion/\"].json[\"id\"]}}",
+        "name": "={{($json.guion?.files?.base_name || 'guion') + '.json'}}",
+        "fileContent": "={{JSON.stringify($json.guion, null, 2)}}"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "splitScenes",
+      "name": "Split Scenes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [560, 520],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "prepScene",
+      "name": "Prep Scene Item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 520],
+      "parameters": {
+        "jsCode": "const scenes = $node['Parse Guion JSON'].json.guion?.scenes || [];\nconst idx = $node['Split Scenes'].context.currentRunIndex || 0;\nconst scene = scenes[idx];\nif(!scene) return [];\nreturn [{scene, guion: $node['Parse Guion JSON'].json.guion}];"
+      }
+    },
+    {
+      "id": "fluxCreate",
+      "name": "PiAPI Flux: Create Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [980, 520],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.piapi.ai/api/v1/task",
+        "jsonParameters": true,
+        "options": { "timeout": 300000 },
+        "headerParametersJson": "={\"X-API-Key\":\"{{$env.PIAPI_KEY}}\",\"Content-Type\":\"application/json\"}",
+        "bodyParametersJson": "={\"model\":\"Qubico/flux1-dev\",\"task_type\":\"txt2img\",\"input\":{\"prompt\":$json.scene.image_prompt,\"width\":$json.scene.width || 1024,\"height\":$json.scene.height || 1024}}"
+      }
+    },
+    {
+      "id": "waitFlux",
+      "name": "Wait Flux",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1180, 520],
+      "parameters": { "amount": 12, "unit": "seconds" }
+    },
+    {
+      "id": "fluxGet",
+      "name": "PiAPI Flux: Get Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1380, 520],
+      "parameters": {
+        "method": "GET",
+        "url": "={{'https://api.piapi.ai/api/v1/task/' + $node['PiAPI Flux: Create Task'].json.data.task_id}}",
+        "jsonParameters": true,
+        "options": { "timeout": 300000 },
+        "headerParametersJson": "={\"X-API-Key\":\"{{$env.PIAPI_KEY}}\"}"
+      }
+    },
+    {
+      "id": "ifFluxDone",
+      "name": "IF Flux completed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1580, 520],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.data.status}}",
+              "operation": "equal",
+              "value2": "completed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "downloadImg",
+      "name": "Download Image (from output URL)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 420],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$json.data.output.image_url || $json.data.output.url || $json.data.output.images?.[0]}}",
+        "responseFormat": "file",
+        "options": { "timeout": 300000 }
+      }
+    },
+    {
+      "id": "uploadImg",
+      "name": "Drive: Upload Image",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1980, 420],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "driveId": "My Drive",
+        "folderId": "={{$node['Drive: Create images/'].json['id']}}",
+        "name": "={{'scene_' + ($node['Prep Scene Item'].json.scene.id || 1) + '.png'}}",
+        "binaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "ttsCreate",
+      "name": "PiAPI TTS: Create Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [980, 760],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.piapi.ai/api/v1/task",
+        "jsonParameters": true,
+        "options": { "timeout": 300000 },
+        "headerParametersJson": "={\"x-api-key\":\"{{$env.PIAPI_KEY}}\",\"Content-Type\":\"application/json\"}",
+        "bodyParametersJson": "={\"model\":\"Qubico/tts\",\"task_type\":\"zero-shot\",\"input\":{\"gen_text\":$node['Parse Guion JSON'].json.guion.tts?.read_aloud || $node['Parse Guion JSON'].json.guion.script,\"ref_audio\":$node['Google Sheets Trigger'].json.RefAudioUrl,\"ref_text\":$node['Google Sheets Trigger'].json.RefAudioText}}"
+      }
+    },
+    {
+      "id": "waitTTS",
+      "name": "Wait TTS",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1180, 760],
+      "parameters": { "amount": 10, "unit": "seconds" }
+    },
+    {
+      "id": "ttsGet",
+      "name": "PiAPI TTS: Get Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1380, 760],
+      "parameters": {
+        "method": "GET",
+        "url": "={{'https://api.piapi.ai/api/v1/task/' + $node['PiAPI TTS: Create Task'].json.data.task_id}}",
+        "jsonParameters": true,
+        "options": { "timeout": 300000 },
+        "headerParametersJson": "={\"x-api-key\":\"{{$env.PIAPI_KEY}}\"}"
+      }
+    },
+    {
+      "id": "ifTTSDone",
+      "name": "IF TTS completed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1580, 760],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.data.status}}",
+              "operation": "equal",
+              "value2": "completed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "downloadAudio",
+      "name": "Download Audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 660],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$json.data.output.audio_url}}",
+        "responseFormat": "file",
+        "options": { "timeout": 300000 }
+      }
+    },
+    {
+      "id": "uploadAudio",
+      "name": "Drive: Upload Audio",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1980, 660],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "driveId": "My Drive",
+        "folderId": "={{$node['Drive: Create audio/'].json['id']}}",
+        "name": "={{($node['Parse Guion JSON'].json.guion.files?.base_name || 'narracion') + '.mp3'}}",
+        "binaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    },
+    {
+      "id": "markDone",
+      "name": "Mark DONE",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2200, 760],
+      "parameters": {
+        "operation": "update",
+        "documentId": "REPLACE_SPREADSHEET_ID",
+        "sheetName": "REPLACE_SHEET_NAME",
+        "key": "rowNumber",
+        "dataToSend": "autoMapInputData",
+        "updateFields": {
+          "values": {
+            "Status": "DONE",
+            "DriveFolderId": "={{$node['Drive: Create Idea Folder'].json['id']}}",
+            "AudioFileId": "={{$node['Drive: Upload Audio'].json['id']}}"
+          }
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE",
+          "name": "REPLACE"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Sheets Trigger": { "main": [[{ "node": "IF Status NEW", "type": "main", "index": 0 }]] },
+    "IF Status NEW": { "main": [[{ "node": "Mark PROCESSING", "type": "main", "index": 0 }]] },
+    "Mark PROCESSING": { "main": [[{ "node": "Drive: Create Idea Folder", "type": "main", "index": 0 }]] },
+    "Drive: Create Idea Folder": { "main": [[{ "node": "Drive: Create images/", "type": "main", "index": 0 },{ "node": "Drive: Create audio/", "type": "main", "index": 0 },{ "node": "Drive: Create guion/", "type": "main", "index": 0 }]] },
+    "Drive: Create images/": { "main": [[{ "node": "Write Folder IDs to Sheet", "type": "main", "index": 0 }]] },
+    "Write Folder IDs to Sheet": { "main": [[{ "node": "PiAPI LLM: Guion+Escenas", "type": "main", "index": 0 }]] },
+    "PiAPI LLM: Guion+Escenas": { "main": [[{ "node": "Parse Guion JSON", "type": "main", "index": 0 }]] },
+    "Parse Guion JSON": { "main": [[{ "node": "Drive: Upload guion.json", "type": "main", "index": 0 },{ "node": "Split Scenes", "type": "main", "index": 0 },{ "node": "PiAPI TTS: Create Task", "type": "main", "index": 0 }]] },
+    "Split Scenes": { "main": [[{ "node": "Prep Scene Item", "type": "main", "index": 0 }]] },
+    "Prep Scene Item": { "main": [[{ "node": "PiAPI Flux: Create Task", "type": "main", "index": 0 }]] },
+    "PiAPI Flux: Create Task": { "main": [[{ "node": "Wait Flux", "type": "main", "index": 0 }]] },
+    "Wait Flux": { "main": [[{ "node": "PiAPI Flux: Get Task", "type": "main", "index": 0 }]] },
+    "PiAPI Flux: Get Task": { "main": [[{ "node": "IF Flux completed", "type": "main", "index": 0 }]] },
+    "IF Flux completed": {
+      "main": [
+        [{ "node": "Download Image (from output URL)", "type": "main", "index": 0 }],
+        [{ "node": "Wait Flux", "type": "main", "index": 0 }]
+      ]
+    },
+    "Download Image (from output URL)": { "main": [[{ "node": "Drive: Upload Image", "type": "main", "index": 0 }]] },
+    "Drive: Upload Image": { "main": [[{ "node": "Split Scenes", "type": "main", "index": 0 }]] },
+    "PiAPI TTS: Create Task": { "main": [[{ "node": "Wait TTS", "type": "main", "index": 0 }]] },
+    "Wait TTS": { "main": [[{ "node": "PiAPI TTS: Get Task", "type": "main", "index": 0 }]] },
+    "PiAPI TTS: Get Task": { "main": [[{ "node": "IF TTS completed", "type": "main", "index": 0 }]] },
+    "IF TTS completed": {
+      "main": [
+        [{ "node": "Download Audio", "type": "main", "index": 0 }],
+        [{ "node": "Wait TTS", "type": "main", "index": 0 }]
+      ]
+    },
+    "Download Audio": { "main": [[{ "node": "Drive: Upload Audio", "type": "main", "index": 0 }]] },
+    "Drive: Upload Audio": { "main": [[{ "node": "Mark DONE", "type": "main", "index": 0 }]] }
+  }
+}
